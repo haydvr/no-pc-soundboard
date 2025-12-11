@@ -2,9 +2,9 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Soundboard — 9999% Boost</title>
+<title>Loudboard</title>
 <style>
-body { background:#111; color:#fff; font-family:Arial,sans-serif; padding:20px; }
+body { background:#111; color:#fff; font-family:Arial,sans-serif; padding:20px; position:relative; min-height:100vh; }
 button { padding:6px 12px; margin:3px; border:none; border-radius:5px; background:#444; color:white; cursor:pointer; }
 button:hover { background:#666; }
 #dropzone { border:2px dashed #555; padding:20px; margin-bottom:15px; text-align:center; }
@@ -12,11 +12,12 @@ table { width:100%; border-collapse:collapse; }
 td { padding:6px; border-bottom:1px solid #333; }
 .volSlider { width:100px; }
 #masterBoostWrap { margin:10px 0; display:flex; align-items:center; gap:10px; }
+#subscribe { position:absolute; bottom:20px; width:100%; text-align:center; font-size:48px; font-weight:bold; color:#f00; }
 </style>
 </head>
 <body>
 
-<h2>Soundboard — Drag/Drop + 9999% Boost</h2>
+<h2>Loudboard</h2>
 
 <button id="addFilesBtn">Add Files</button>
 <button id="addFolderBtn">Add Folder</button>
@@ -33,6 +34,8 @@ td { padding:6px; border-bottom:1px solid #333; }
 
 <input type="file" id="filePicker" multiple accept="audio/*" style="display:none;">
 <input type="file" id="folderPicker" webkitdirectory directory style="display:none;">
+
+<div id="subscribe">SUBSCRIBE TO HAYDVR</div>
 
 <script>
 /*----------------- AUDIO CONTEXT -----------------*/
