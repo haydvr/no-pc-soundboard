@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Soundboard — 4000% Boost</title>
+<title>Soundboard — 9999% Boost</title>
 <style>
 body { background:#111; color:#fff; font-family:Arial,sans-serif; padding:20px; }
 button { padding:6px 12px; margin:3px; border:none; border-radius:5px; background:#444; color:white; cursor:pointer; }
@@ -16,7 +16,7 @@ td { padding:6px; border-bottom:1px solid #333; }
 </head>
 <body>
 
-<h2>Soundboard — Drag/Drop + 4000% Boost</h2>
+<h2>Soundboard — Drag/Drop + 9999% Boost</h2>
 
 <button id="addFilesBtn">Add Files</button>
 <button id="addFolderBtn">Add Folder</button>
@@ -24,7 +24,7 @@ td { padding:6px; border-bottom:1px solid #333; }
 <button id="restartAllBtn">Restart All</button>
 
 <div id="masterBoostWrap">
-    Master Boost: <input type="range" id="masterBoost" min="100" max="4000" value="100" step="1">
+    Master Boost: <input type="range" id="masterBoost" min="100" max="9999" value="100" step="1">
     <span id="masterVal">100%</span>
 </div>
 
@@ -48,6 +48,7 @@ masterComp.release.value = 0.25;
 masterGain.connect(masterComp);
 masterComp.connect(audioCtx.destination);
 
+// Unlock audio context on first interaction
 document.body.addEventListener("click", ()=>{ if(audioCtx.state==='suspended') audioCtx.resume(); }, {once:true});
 
 let tracks = [];
@@ -145,11 +146,11 @@ dz.ondragover=e=>{ e.preventDefault(); dz.style.borderColor="#888"; };
 dz.ondragleave=()=>dz.style.borderColor="#555";
 dz.ondrop=e=>{ e.preventDefault(); dz.style.borderColor="#555"; handleItems(e.dataTransfer.items); };
 
-/*----------------- Master Boost 100%-4000% -----------------*/
+/*----------------- Master Boost 100%-9999% -----------------*/
 const masterSlider = document.getElementById("masterBoost");
 const masterVal = document.getElementById("masterVal");
 masterSlider.oninput = ()=>{
-    const val = Number(masterSlider.value)/100; // 1–40
+    const val = Number(masterSlider.value)/100; // 1–99.99
     masterGain.gain.setTargetAtTime(val, audioCtx.currentTime, 0.05);
     masterVal.textContent = masterSlider.value + "%";
 };
