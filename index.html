@@ -1,163 +1,281 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Loudboard</title>
 <style>
-body { background:#111; color:#fff; font-family:Arial,sans-serif; padding:20px; position:relative; min-height:100vh; }
-button { padding:6px 12px; margin:3px; border:none; border-radius:5px; background:#444; color:white; cursor:pointer; }
+body {
+  background:#111;
+  color:#fff;
+  font-family:Arial, sans-serif;
+  margin:0;
+  padding:20px;
+}
+h1 { text-align:center; }
+.controls { text-align:center; margin-bottom:10px; }
+button {
+  padding:6px 12px;
+  margin:2px;
+  background:#444;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
 button:hover { background:#666; }
-#dropzone { border:2px dashed #555; padding:20px; margin-bottom:15px; text-align:center; }
-table { width:100%; border-collapse:collapse; }
-td { padding:6px; border-bottom:1px solid #333; }
-.volSlider { width:100px; }
-#masterBoostWrap { margin:10px 0; display:flex; align-items:center; gap:10px; }
-#subscribe { position:absolute; bottom:20px; width:100%; text-align:center; font-size:48px; font-weight:bold; color:#f00; }
+#dropzone {
+  border:2px dashed #555;
+  padding:20px;
+  text-align:center;
+  margin-bottom:15px;
+}
+.track {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-bottom:6px;
+}
+.track span {
+  flex:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+input[type=range] { width:90px; }
+#subscribe {
+  margin-top:30px;
+  font-size:40px;
+  font-weight:bold;
+  color:red;
+  text-align:center;
+  cursor:pointer;
+}
+#searchBar {
+  width:90%;
+  max-width:500px;
+  padding:6px;
+  margin-bottom:10px;
+  border-radius:6px;
+  border:1px solid #555;
+  display:block;
+  margin-left:auto;
+  margin-right:auto;
+}
+.category-label {
+  font-size:12px;
+  background:#222;
+  padding:2px 4px;
+  border-radius:4px;
+  margin-left:2px;
+}
 </style>
 </head>
 <body>
 
-<h2>Loudboard</h2>
+<h1>Loudboard</h1>
 
-<button id="addFilesBtn">Add Files</button>
-<button id="addFolderBtn">Add Folder</button>
-<button id="stopAllBtn">Stop All</button>
-<button id="restartAllBtn">Restart All</button>
-
-<div id="masterBoostWrap">
-    Master Boost: <input type="range" id="masterBoost" min="100" max="9999" value="100" step="1">
-    <span id="masterVal">100%</span>
+<div class="controls">
+  <button id="addFiles">Add Files</button>
+  <button id="addFolder">Add Folder</button>
+  <button id="stopAll">Stop All</button>
+  <button id="ownerBtn">Owner Stuff</button>
 </div>
 
-<div id="dropzone">Drag & Drop MP3 files or folders here</div>
-<table id="trackTable"></table>
+<div class="controls">
+  Master Volume:
+  <input id="master" type="range" min="100" max="1000" value="100">
+  <span id="masterVal">100%</span>
+</div>
 
-<input type="file" id="filePicker" multiple accept="audio/*" style="display:none;">
-<input type="file" id="folderPicker" webkitdirectory directory style="display:none;">
+<input type="text" id="searchBar" placeholder="Search tracks...">
 
-<div id="subscribe">SUBSCRIBE TO HAYDVR</div>
+<div id="dropzone">Drag & Drop MP3 / WAV files here</div>
+
+<div id="tracks"></div>
+
+<input id="fileInput" type="file" multiple accept="audio/*" hidden>
+<input id="folderInput" type="file" webkitdirectory hidden>
+
+<div id="subscribe"
+onclick="window.open('https://www.youtube.com/@Haydenplaysvr1','_blank')">
+SUBSCRIBE TO HAYDVR
+</div>
 
 <script>
-/*----------------- AUDIO CONTEXT -----------------*/
-const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-const masterGain = audioCtx.createGain();
-masterGain.gain.value = 1; // 1x
-const masterComp = audioCtx.createDynamicsCompressor();
-masterComp.threshold.value = -12;
-masterComp.knee.value = 40;
-masterComp.ratio.value = 20;
-masterComp.attack.value = 0.003;
-masterComp.release.value = 0.25;
-masterGain.connect(masterComp);
-masterComp.connect(audioCtx.destination);
+/* ===== AUDIO CORE ===== */
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = ctx.createGain();
+masterGain.connect(ctx.destination);
+masterGain.gain.value = 1;
 
-// Unlock audio context on first interaction
-document.body.addEventListener("click", ()=>{ if(audioCtx.state==='suspended') audioCtx.resume(); }, {once:true});
+document.body.addEventListener("click", () => { if(ctx.state==="suspended") ctx.resume(); }, {once:true});
 
-let tracks = [];
+/* ===== OWNER MODE ===== */
+const OWNER_PASS = "pokemon/admin132";
+let owner = false;
+let panic = false;
+let savedGain = 1;
 
-/*----------------- Track Functions -----------------*/
-function addTrack(file){
-    if(!file.type.startsWith("audio/")) return;
-    const url = URL.createObjectURL(file);
-    const track = {name:file.name,file:url,audio:null,source:null,gainNode:null,vol:1};
-    tracks.push(track);
-    addTrackRow(track);
-}
-
-async function playTrack(track){
-    if(track.source){ try{track.source.disconnect()}catch{} track.source=null; }
-    if(track.audio){ try{track.audio.pause()}catch{} }
-    const audio = new Audio(track.file); audio.crossOrigin="anonymous";
-    const source = audioCtx.createMediaElementSource(audio);
-    const gainNode = audioCtx.createGain(); gainNode.gain.value=track.vol;
-    source.connect(gainNode); gainNode.connect(masterGain);
-    track.audio=audio; track.source=source; track.gainNode=gainNode;
-    await audio.play();
-}
-function pauseTrack(track){ if(track.audio) track.audio.pause(); }
-function restartTrack(track){ if(track.audio) track.audio.currentTime=0; }
-function stopTrack(track){ if(track.audio){ try{track.audio.pause()}catch{} track.audio=null; } if(track.source){ try{track.source.disconnect()}catch{} track.source=null; } }
-
-/*----------------- Track Row -----------------*/
-function addTrackRow(track){
-    const table = document.getElementById("trackTable");
-    const row = document.createElement("tr");
-    const nameTd = document.createElement("td"); nameTd.textContent=track.name; row.appendChild(nameTd);
-
-    const controlTd = document.createElement("td"); row.appendChild(controlTd);
-    ["Play","Pause","Restart","Stop"].forEach(btnName=>{
-        const btn = document.createElement("button");
-        btn.textContent = btnName;
-        if(btnName==="Play") btn.onclick=()=>playTrack(track);
-        if(btnName==="Pause") btn.onclick=()=>pauseTrack(track);
-        if(btnName==="Restart") btn.onclick=()=>restartTrack(track);
-        if(btnName==="Stop") btn.onclick=()=>stopTrack(track);
-        controlTd.appendChild(btn);
-    });
-
-    const volTd=document.createElement("td"); row.appendChild(volTd);
-    const slider=document.createElement("input"); slider.type="range"; slider.min=0; slider.max=20; slider.step=0.1; slider.value=1; slider.className="volSlider";
-    slider.oninput=()=>{ track.vol=Number(slider.value); if(track.gainNode) track.gainNode.gain.value=track.vol; };
-    volTd.appendChild(slider);
-
-    table.appendChild(row);
-}
-
-/*----------------- Stop / Restart All -----------------*/
-document.getElementById("stopAllBtn").onclick = ()=>tracks.forEach(stopTrack);
-document.getElementById("restartAllBtn").onclick = ()=>tracks.forEach(t=>{ restartTrack(t); playTrack(t); });
-
-/*----------------- File Pickers -----------------*/
-document.getElementById("addFilesBtn").onclick = ()=>document.getElementById("filePicker").click();
-document.getElementById("addFolderBtn").onclick = ()=>document.getElementById("folderPicker").click();
-document.getElementById("filePicker").onchange = e=>[...e.target.files].forEach(addTrack);
-document.getElementById("folderPicker").onchange = e=>[...e.target.files].forEach(addTrack);
-
-/*----------------- Drag & Drop + Folder Support -----------------*/
-async function traverseFileTree(item){
-    return new Promise(resolve=>{
-        if(item.isFile) item.file(f=>resolve([f]));
-        else if(item.isDirectory){
-            const reader=item.createReader();
-            let entries=[];
-            const readAll=()=>{
-                reader.readEntries(inner=>{
-                    if(inner.length===0) resolve(entries.flat());
-                    else{
-                        const promises=inner.map(traverseFileTree);
-                        Promise.all(promises).then(res=>{ entries.push(...res.flat()); readAll(); }).catch(()=>readAll());
-                    }
-                });
-            }; readAll();
-        } else resolve([]);
-    });
-}
-
-async function handleItems(items){
-    const files=[];
-    for(let i=0;i<items.length;i++){
-        const it = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
-        if(it){ const fs=await traverseFileTree(it); files.push(...fs); }
-        else{ const f=items[i].getAsFile(); if(f) files.push(f); }
-    }
-    files.forEach(f=>addTrack(f));
-}
-
-const dz=document.getElementById("dropzone");
-dz.ondragover=e=>{ e.preventDefault(); dz.style.borderColor="#888"; };
-dz.ondragleave=()=>dz.style.borderColor="#555";
-dz.ondrop=e=>{ e.preventDefault(); dz.style.borderColor="#555"; handleItems(e.dataTransfer.items); };
-
-/*----------------- Master Boost 100%-9999% -----------------*/
-const masterSlider = document.getElementById("masterBoost");
+const master = document.getElementById("master");
 const masterVal = document.getElementById("masterVal");
-masterSlider.oninput = ()=>{
-    const val = Number(masterSlider.value)/100; // 1–99.99
-    masterGain.gain.setTargetAtTime(val, audioCtx.currentTime, 0.05);
-    masterVal.textContent = masterSlider.value + "%";
+
+ownerBtn.onclick = () => {
+  if (owner) return alert("Already unlocked");
+  const p = prompt("Owner password:");
+  if (p !== OWNER_PASS) return alert("Wrong password");
+  owner = true;
+  master.max = 40000;
+  alert("Owner mode unlocked (40000%) — Loop & Categories unlocked");
+};
+
+/* ===== PANIC MUTE ===== */
+document.addEventListener("keydown", e => {
+  if (!owner) return;
+  if (e.key.toLowerCase() !== "m") return;
+
+  if (!panic) {
+    savedGain = masterGain.gain.value;
+    masterGain.gain.value = 0;
+    masterVal.textContent = "MUTED (PANIC)";
+    panic = true;
+  } else {
+    masterGain.gain.value = savedGain;
+    panic = false;
+    masterVal.textContent = master.value + "%";
+  }
+});
+
+/* ===== MASTER VOLUME ===== */
+master.oninput = () => {
+  if (panic) return;
+  masterGain.gain.value = master.value / 100;
+  masterVal.textContent = master.value + "%";
+};
+
+/* ===== TRACK SYSTEM ===== */
+const tracksDiv = document.getElementById("tracks");
+const allSources = [];
+const trackObjs = [];
+
+function addTrack(file) {
+  if (!file.type.startsWith("audio/")) return;
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const buffer = await ctx.decodeAudioData(reader.result);
+
+    const track = {
+      name:file.name,
+      buffer,
+      source:null,
+      gain:ctx.createGain(),
+      loop:false,
+      category:"None"
+    };
+    track.gain.connect(masterGain);
+    trackObjs.push(track);
+
+    const div = document.createElement("div");
+    div.className = "track";
+
+    const label = document.createElement("span");
+    label.textContent = file.name;
+
+    const playBtn = document.createElement("button");
+    playBtn.textContent="Play";
+
+    const restartBtn = document.createElement("button");
+    restartBtn.textContent="Restart";
+
+    const muteBtn = document.createElement("button");
+    muteBtn.textContent="Mute";
+
+    const loopBtn = document.createElement("button");
+    loopBtn.textContent="Loop";
+    loopBtn.disabled = true; // Owner-only
+
+    const catBtn = document.createElement("button");
+    catBtn.textContent="Set Category";
+    catBtn.disabled = true; // Owner-only
+
+    const vol = document.createElement("input");
+    vol.type="range";
+    vol.min=0; vol.max=2; vol.step=0.01; vol.value=1;
+
+    function play() {
+      if(track.source) track.source.stop();
+      track.source = ctx.createBufferSource();
+      track.source.buffer = track.buffer;
+      track.source.loop = track.loop;
+      track.source.connect(track.gain);
+      track.source.start();
+      allSources.push(track.source);
+    }
+
+    playBtn.onclick = play;
+    restartBtn.onclick = () => {
+      if(track.source) track.source.stop();
+      play();
+    };
+    muteBtn.onclick = () => {
+      if(track.gain.gain.value>0) { track.gain.gain.value=0; muteBtn.textContent="Unmute"; }
+      else { track.gain.gain.value=vol.value; muteBtn.textContent="Mute"; }
+    };
+    vol.oninput = ()=>{ if(track.gain.gain.value>0) track.gain.gain.value=vol.value; };
+
+    loopBtn.onclick = ()=>{
+      if(!owner) return alert("Owner-only");
+      track.loop = !track.loop;
+      loopBtn.textContent = track.loop ? "Looping" : "Loop";
+      if(track.source) track.source.loop = track.loop;
+    };
+
+    catBtn.onclick = ()=>{
+      if(!owner) return alert("Owner-only");
+      const cat = prompt("Enter category name:", track.category);
+      if(cat) { track.category=cat; label.innerHTML=file.name+' <span class="category-label">'+cat+'</span>'; }
+    };
+
+    div.append(label, playBtn, restartBtn, muteBtn, vol, loopBtn, catBtn);
+    tracksDiv.appendChild(div);
+
+    // Enable owner-only buttons if owner unlocked
+    if(owner){
+      loopBtn.disabled=false;
+      catBtn.disabled=false;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ===== FILE INPUT ===== */
+fileInput.onchange = e => [...e.target.files].forEach(addTrack);
+folderInput.onchange = e => [...e.target.files].forEach(addTrack);
+
+addFiles.onclick = () => fileInput.click();
+addFolder.onclick = () => folderInput.click();
+
+/* ===== DRAG & DROP ===== */
+dropzone.ondragover = e => e.preventDefault();
+dropzone.ondrop = e => {
+  e.preventDefault();
+  [...e.dataTransfer.files].forEach(addTrack);
+};
+
+/* ===== STOP ALL ===== */
+stopAll.onclick = () => {
+  allSources.forEach(s => { try{s.stop();}catch{} });
+  allSources.length = 0;
+};
+
+/* ===== SEARCH BAR ===== */
+searchBar.oninput = () => {
+  const q = searchBar.value.toLowerCase();
+  trackObjs.forEach((t,i)=>{
+    const div = tracksDiv.children[i];
+    div.style.display = t.name.toLowerCase().includes(q) || t.category.toLowerCase().includes(q) ? "" : "none";
+  });
 };
 </script>
-
 </body>
 </html>
