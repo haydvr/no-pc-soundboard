@@ -12,7 +12,9 @@ body {
   padding:20px;
 }
 h1 { text-align:center; }
+
 .controls { text-align:center; margin-bottom:10px; }
+
 button {
   padding:6px 12px;
   margin:2px;
@@ -23,25 +25,56 @@ button {
   cursor:pointer;
 }
 button:hover { background:#666; }
+button:disabled { opacity:0.4; cursor:not-allowed; }
+
 #dropzone {
   border:2px dashed #555;
   padding:20px;
   text-align:center;
   margin-bottom:15px;
 }
+
 .track {
   display:flex;
   align-items:center;
   gap:6px;
   margin-bottom:6px;
 }
+
 .track span {
   flex:1;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
+
 input[type=range] { width:90px; }
+
+#searchBar {
+  width:90%;
+  max-width:500px;
+  padding:6px;
+  margin:10px auto;
+  display:block;
+  border-radius:6px;
+  border:1px solid #555;
+}
+
+.category {
+  font-size:11px;
+  background:#222;
+  padding:2px 6px;
+  border-radius:4px;
+  margin-left:6px;
+}
+
+#readThis {
+  background:#1a1a1a;
+  padding:12px;
+  border-radius:8px;
+  margin-bottom:15px;
+}
+
 #subscribe {
   margin-top:30px;
   font-size:40px;
@@ -49,24 +82,6 @@ input[type=range] { width:90px; }
   color:red;
   text-align:center;
   cursor:pointer;
-}
-#searchBar {
-  width:90%;
-  max-width:500px;
-  padding:6px;
-  margin-bottom:10px;
-  border-radius:6px;
-  border:1px solid #555;
-  display:block;
-  margin-left:auto;
-  margin-right:auto;
-}
-.category-label {
-  font-size:12px;
-  background:#222;
-  padding:2px 4px;
-  border-radius:4px;
-  margin-left:2px;
 }
 </style>
 </head>
@@ -87,7 +102,27 @@ input[type=range] { width:90px; }
   <span id="masterVal">100%</span>
 </div>
 
-<input type="text" id="searchBar" placeholder="Search tracks...">
+<input id="searchBar" placeholder="Search sounds or categories">
+
+<div id="readThis">
+  <h3>READ THIS</h3>
+  <ol>
+    <li>Click anywhere once to unlock audio.</li>
+    <li>Add sounds using drag & drop or the buttons.</li>
+    <li>Use Play / Restart / Mute per sound.</li>
+    <li>Search filters by name or category.</li>
+    <li>Owner mode unlocks looping, categories, 40000% volume, and panic mute (M).</li>
+  </ol>
+
+  <p style="margin-top:10px;">
+    <strong>Bonus Tip:</strong><br>
+    i recomend putting the sound files in whatever your main downloads folder is.
+    For computer this is easy, but if your on phone im not sure — so wherever files go
+    automatically when you download them, go there and move the sound files.
+    Also put the sounds directly in the downloads and not in a subfolder and everything
+    should work.
+  </p>
+</div>
 
 <div id="dropzone">Drag & Drop MP3 / WAV files here</div>
 
@@ -102,60 +137,52 @@ SUBSCRIBE TO HAYDVR
 </div>
 
 <script>
-/* ===== AUDIO CORE ===== */
 const ctx = new (window.AudioContext || window.webkitAudioContext)();
 const masterGain = ctx.createGain();
 masterGain.connect(ctx.destination);
 masterGain.gain.value = 1;
 
-document.body.addEventListener("click", () => { if(ctx.state==="suspended") ctx.resume(); }, {once:true});
+document.body.addEventListener("click", () => {
+  if (ctx.state === "suspended") ctx.resume();
+}, { once:true });
 
-/* ===== OWNER MODE ===== */
 const OWNER_PASS = "pokemon/admin132";
 let owner = false;
 let panic = false;
 let savedGain = 1;
 
-const master = document.getElementById("master");
-const masterVal = document.getElementById("masterVal");
-
 ownerBtn.onclick = () => {
-  if (owner) return alert("Already unlocked");
-  const p = prompt("Owner password:");
-  if (p !== OWNER_PASS) return alert("Wrong password");
+  if (owner) return;
+  if (prompt("Owner password:") !== OWNER_PASS) return alert("Wrong password");
   owner = true;
   master.max = 40000;
-  alert("Owner mode unlocked (40000%) — Loop & Categories unlocked");
+  document.querySelectorAll(".ownerOnly").forEach(b => b.disabled = false);
+  alert("Owner mode unlocked");
 };
 
-/* ===== PANIC MUTE ===== */
 document.addEventListener("keydown", e => {
-  if (!owner) return;
-  if (e.key.toLowerCase() !== "m") return;
-
+  if (!owner || e.key.toLowerCase() !== "m") return;
   if (!panic) {
     savedGain = masterGain.gain.value;
     masterGain.gain.value = 0;
-    masterVal.textContent = "MUTED (PANIC)";
+    masterVal.textContent = "MUTED";
     panic = true;
   } else {
     masterGain.gain.value = savedGain;
-    panic = false;
     masterVal.textContent = master.value + "%";
+    panic = false;
   }
 });
 
-/* ===== MASTER VOLUME ===== */
 master.oninput = () => {
-  if (panic) return;
-  masterGain.gain.value = master.value / 100;
-  masterVal.textContent = master.value + "%";
+  if (!panic) {
+    masterGain.gain.value = master.value / 100;
+    masterVal.textContent = master.value + "%";
+  }
 };
 
-/* ===== TRACK SYSTEM ===== */
 const tracksDiv = document.getElementById("tracks");
-const allSources = [];
-const trackObjs = [];
+const trackData = [];
 
 function addTrack(file) {
   if (!file.type.startsWith("audio/")) return;
@@ -167,113 +194,110 @@ function addTrack(file) {
     const track = {
       name:file.name,
       buffer,
-      source:null,
-      gain:ctx.createGain(),
       loop:false,
-      category:"None"
+      category:"",
+      source:null,
+      gain:ctx.createGain()
     };
     track.gain.connect(masterGain);
-    trackObjs.push(track);
+    trackData.push(track);
 
-    const div = document.createElement("div");
-    div.className = "track";
+    const row = document.createElement("div");
+    row.className = "track";
 
     const label = document.createElement("span");
     label.textContent = file.name;
 
-    const playBtn = document.createElement("button");
-    playBtn.textContent="Play";
+    const play = document.createElement("button");
+    play.textContent = "Play";
 
-    const restartBtn = document.createElement("button");
-    restartBtn.textContent="Restart";
+    const restart = document.createElement("button");
+    restart.textContent = "Restart";
 
-    const muteBtn = document.createElement("button");
-    muteBtn.textContent="Mute";
+    const mute = document.createElement("button");
+    mute.textContent = "Mute";
+
+    const vol = document.createElement("input");
+    vol.type="range"; vol.min=0; vol.max=2; vol.step=0.01; vol.value=1;
 
     const loopBtn = document.createElement("button");
     loopBtn.textContent="Loop";
-    loopBtn.disabled = true; // Owner-only
+    loopBtn.className="ownerOnly";
+    loopBtn.disabled=true;
 
     const catBtn = document.createElement("button");
-    catBtn.textContent="Set Category";
-    catBtn.disabled = true; // Owner-only
+    catBtn.textContent="Category";
+    catBtn.className="ownerOnly";
+    catBtn.disabled=true;
 
-    const vol = document.createElement("input");
-    vol.type="range";
-    vol.min=0; vol.max=2; vol.step=0.01; vol.value=1;
-
-    function play() {
-      if(track.source) track.source.stop();
+    function playSound() {
+      if (track.source) track.source.stop();
       track.source = ctx.createBufferSource();
       track.source.buffer = track.buffer;
       track.source.loop = track.loop;
       track.source.connect(track.gain);
       track.source.start();
-      allSources.push(track.source);
     }
 
-    playBtn.onclick = play;
-    restartBtn.onclick = () => {
-      if(track.source) track.source.stop();
-      play();
-    };
-    muteBtn.onclick = () => {
-      if(track.gain.gain.value>0) { track.gain.gain.value=0; muteBtn.textContent="Unmute"; }
-      else { track.gain.gain.value=vol.value; muteBtn.textContent="Mute"; }
-    };
-    vol.oninput = ()=>{ if(track.gain.gain.value>0) track.gain.gain.value=vol.value; };
+    play.onclick = playSound;
+    restart.onclick = playSound;
 
-    loopBtn.onclick = ()=>{
-      if(!owner) return alert("Owner-only");
+    mute.onclick = () => {
+      if (track.gain.gain.value > 0) {
+        track.gain.gain.value = 0;
+        mute.textContent = "Unmute";
+      } else {
+        track.gain.gain.value = vol.value;
+        mute.textContent = "Mute";
+      }
+    };
+
+    vol.oninput = () => {
+      if (track.gain.gain.value > 0) track.gain.gain.value = vol.value;
+    };
+
+    loopBtn.onclick = () => {
       track.loop = !track.loop;
       loopBtn.textContent = track.loop ? "Looping" : "Loop";
-      if(track.source) track.source.loop = track.loop;
+      if (track.source) track.source.loop = track.loop;
     };
 
-    catBtn.onclick = ()=>{
-      if(!owner) return alert("Owner-only");
-      const cat = prompt("Enter category name:", track.category);
-      if(cat) { track.category=cat; label.innerHTML=file.name+' <span class="category-label">'+cat+'</span>'; }
+    catBtn.onclick = () => {
+      const c = prompt("Category name:", track.category);
+      if (!c) return;
+      track.category = c;
+      label.innerHTML = file.name + `<span class="category">${c}</span>`;
     };
 
-    div.append(label, playBtn, restartBtn, muteBtn, vol, loopBtn, catBtn);
-    tracksDiv.appendChild(div);
-
-    // Enable owner-only buttons if owner unlocked
-    if(owner){
-      loopBtn.disabled=false;
-      catBtn.disabled=false;
-    }
+    row.append(label, play, restart, mute, vol, loopBtn, catBtn);
+    tracksDiv.appendChild(row);
   };
   reader.readAsArrayBuffer(file);
 }
 
-/* ===== FILE INPUT ===== */
+addFiles.onclick = () => fileInput.click();
+addFolder.onclick = () => folderInput.click();
 fileInput.onchange = e => [...e.target.files].forEach(addTrack);
 folderInput.onchange = e => [...e.target.files].forEach(addTrack);
 
-addFiles.onclick = () => fileInput.click();
-addFolder.onclick = () => folderInput.click();
-
-/* ===== DRAG & DROP ===== */
 dropzone.ondragover = e => e.preventDefault();
 dropzone.ondrop = e => {
   e.preventDefault();
   [...e.dataTransfer.files].forEach(addTrack);
 };
 
-/* ===== STOP ALL ===== */
 stopAll.onclick = () => {
-  allSources.forEach(s => { try{s.stop();}catch{} });
-  allSources.length = 0;
+  trackData.forEach(t => { if (t.source) try{t.source.stop()}catch{} });
 };
 
-/* ===== SEARCH BAR ===== */
 searchBar.oninput = () => {
   const q = searchBar.value.toLowerCase();
-  trackObjs.forEach((t,i)=>{
-    const div = tracksDiv.children[i];
-    div.style.display = t.name.toLowerCase().includes(q) || t.category.toLowerCase().includes(q) ? "" : "none";
+  [...tracksDiv.children].forEach((row,i)=>{
+    const t = trackData[i];
+    row.style.display =
+      t.name.toLowerCase().includes(q) ||
+      t.category.toLowerCase().includes(q)
+      ? "" : "none";
   });
 };
 </script>
