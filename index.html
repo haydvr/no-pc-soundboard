@@ -48,7 +48,15 @@ button:disabled { opacity:0.4; cursor:not-allowed; }
   text-overflow:ellipsis;
 }
 
-input[type=range] { width:90px; }
+input[type=range] { width:120px; }
+input[type=number] {
+  width:90px;
+  background:#222;
+  color:#fff;
+  border:1px solid #555;
+  border-radius:6px;
+  padding:4px;
+}
 
 #searchBar {
   width:90%;
@@ -98,7 +106,8 @@ input[type=range] { width:90px; }
 
 <div class="controls">
   Master Volume:
-  <input id="master" type="range" min="100" max="1000" value="100">
+  <input id="master" type="range" min="100" max="12000" value="100">
+  <input id="masterInput" type="number" min="100" max="12000" value="100" disabled>
   <span id="masterVal">100%</span>
 </div>
 
@@ -111,7 +120,6 @@ input[type=range] { width:90px; }
     <li>Add sounds using drag & drop or the buttons.</li>
     <li>Use Play / Restart / Mute per sound.</li>
     <li>Search filters by name or category.</li>
-    <li>Owner mode unlocks looping, categories, 40000% volume, and panic mute (M).</li>
   </ol>
 
   <p style="margin-top:10px;">
@@ -125,7 +133,6 @@ input[type=range] { width:90px; }
 </div>
 
 <div id="dropzone">Drag & Drop MP3 / WAV files here</div>
-
 <div id="tracks"></div>
 
 <input id="fileInput" type="file" multiple accept="audio/*" hidden>
@@ -151,11 +158,39 @@ let owner = false;
 let panic = false;
 let savedGain = 1;
 
+const master = document.getElementById("master");
+const masterInput = document.getElementById("masterInput");
+const masterVal = document.getElementById("masterVal");
+
+function applyMaster(val) {
+  masterGain.gain.value = val / 100;
+  masterVal.textContent = val + "%";
+}
+
+master.oninput = () => {
+  if (!panic) {
+    masterInput.value = master.value;
+    applyMaster(master.value);
+  }
+};
+
+masterInput.oninput = () => {
+  if (!owner) return;
+  let v = Math.min(200000, Math.max(100, masterInput.value));
+  master.value = v;
+  applyMaster(v);
+};
+
 ownerBtn.onclick = () => {
   if (owner) return;
   if (prompt("Owner password:") !== OWNER_PASS) return alert("Wrong password");
+
   owner = true;
-  master.max = 40000;
+
+  master.max = 200000;
+  masterInput.max = 200000;
+  masterInput.disabled = false;
+
   document.querySelectorAll(".ownerOnly").forEach(b => b.disabled = false);
   alert("Owner mode unlocked");
 };
@@ -173,13 +208,6 @@ document.addEventListener("keydown", e => {
     panic = false;
   }
 });
-
-master.oninput = () => {
-  if (!panic) {
-    masterGain.gain.value = master.value / 100;
-    masterVal.textContent = master.value + "%";
-  }
-};
 
 const tracksDiv = document.getElementById("tracks");
 const trackData = [];
